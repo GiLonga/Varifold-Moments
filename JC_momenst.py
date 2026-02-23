@@ -975,7 +975,7 @@ def thirteen(x):
     m311 = get_moment(cache_moments, X, 3,1,1)
     m022 = get_moment(cache_moments, X, 0,2,2)
     m033 = get_moment(cache_moments, X, 0,3,3)
-    I1, I2, I3, I4 = dist2cm(X, norm = False, moment_dict= cache_moments)
+    I1, I2, I3, I4 = dist2cm(X, Norm = False, moment_dict= cache_moments)
     return (I1, I2, I3, I4,
             linear_inv(x)[0], linear_inv(x)[1],abs(m100/m000),abs(m311/m011),
             m022.imag/m000,m033.real/m000,borderdets(x)[0],vtld(x),point2line(x)[0])
