@@ -9,7 +9,12 @@
 import math
 import random
 import matplotlib.pyplot as plt
-
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE, MDS
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from umap import UMAP
+from sklearn.decomposition import PCA
+from  scipy.interpolate import interp1d
 
 ## Some Basic Polygons
 
@@ -199,8 +204,6 @@ def Draw(polygon):
 
     ### From Scheme to Python : moments.ss 
 
-import math
-import random
 import numpy as np
 
 def CyclicSum(func, atuple):
@@ -307,7 +310,6 @@ def Centering(X):
 
 ## Plotting a closed polygon that is given as a tuple of complex numbers.
 
-import matplotlib.pyplot as plt
 
 def Real(polygon):
     "List of x cooordinates of points in polygon"
@@ -549,3 +551,293 @@ xprime = -2*np.sin(t)
 yprime = np.cos(t)
 Elipseprime = tuple(map(complex, xprime,yprime))
 Elipsenormals = tuple(map(lambda z: -1j*z/abs(z), Elipseprime))
+
+def convex_hull(points):
+    """Compute the convex hull of a set of points given as complex numbers."""
+    # Convert complex numbers to tuples of floats for sorting
+    points = [(p.real, p.imag) for p in points]
+
+    # Sort the points lexographically (first by x, then by y)
+    points = sorted(points)
+
+    # Build lower hull
+    lower = []
+    for p in points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    # Build upper hull
+    upper = []
+    for p in reversed(points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    # Concatenate and remove duplicates
+    convex_hull_points = lower[:-1] + upper[:-1]
+
+    # Convert back to complex numbers
+    return [complex(p[0], p[1]) for p in convex_hull_points]
+
+def cross(o, a, b):
+    """Compute the cross product of vectors oa and ob."""
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def shape_to_complex(shape: np.ndarray) -> np.ndarray:
+    """
+    Convert a 2D shape array (N x 2) to complex numbers.
+
+    Parameters
+    ----------
+    shape : np.ndarray
+        Array of shape (N, 2), where each row is [x, y].
+
+    Returns
+    -------
+    np.ndarray
+        Array of complex numbers: x + iy for each point.
+    """
+    # Check input shape
+    if shape.ndim != 2 or shape.shape[1] != 2:
+        raise ValueError("Input shape must be a (N,2) array of coordinates.")
+    
+    # Convert to complex numbers
+    return shape[:, 0] + 1j * shape[:, 1]
+
+def remove_duplicate_vertices(X, tol=1e-12):
+    """
+    Removes consecutive duplicate (or near-duplicate) vertices
+    from a closed polygon X.
+    
+    Parameters
+    ----------
+    X : iterable of complex
+        Polygon vertices (closed or open)
+    tol : float
+        Distance tolerance for duplicates
+    
+    Returns
+    -------
+    tuple of complex
+        Cleaned polygon
+    """
+    if len(X) < 2:
+        return tuple(X)
+
+    cleaned = [X[0]]
+
+    for z in X[1:]:
+        if abs(z - cleaned[-1]) > tol:
+            cleaned.append(z)
+
+    # If polygon is closed, check last vs first
+    if len(cleaned) > 1 and abs(cleaned[0] - cleaned[-1]) < tol:
+        cleaned.pop()
+
+    return tuple(cleaned)
+
+import numpy as np
+import matplotlib.colors as mcolors
+
+def generate_distinct_colors(n):
+    hues = np.linspace(0, 1, n, endpoint=False)
+    colors = [mcolors.hsv_to_rgb((h, 0.75, 0.9)) for h in hues]
+    return colors
+
+def plot_2D(X, labels):
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    methods = {
+    "PCA": PCA(n_components=2),
+    "t-SNE": TSNE(n_components=2, random_state=42, perplexity=30),
+    "UMAP": UMAP(n_components=2, random_state=42),
+    "MDS": MDS(n_components=2, random_state=42),
+    #"Isomap": Isomap(n_components=2),
+    "Bouquet of Flowers": local_pca(X_scaled, labels)
+}
+
+    if len(set(labels)) > 1:
+        methods["LDA"] = LDA(n_components=2)
+
+    plt.figure(figsize=(18, 12))
+
+    n_clusters = len(np.unique(labels))
+    colors = generate_distinct_colors(n_clusters)
+    for i, (name, model) in enumerate(methods.items(), 1):
+        plt.subplot(2, 3, i)
+
+        if name == "LDA":
+            X_2d = model.fit_transform(X_scaled, labels)
+        elif name == "Bouquet of Flowers":
+            X_2d = model
+        else:
+            X_2d = model.fit_transform(X_scaled)
+
+        for label_id in range(n_clusters):
+            idx = labels == label_id
+            plt.scatter(X_2d[idx, 0], X_2d[idx, 1], alpha=0.7, color=colors[label_id], label=f"Class {label_id}")
+
+        plt.title(name)
+        plt.xlabel("Component 1")
+        plt.ylabel("Component 2")
+        plt.grid(True)
+        plt.legend(loc="best", fontsize=8)
+
+    plt.suptitle("Original Leaves Visualization", fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
+def reparametrize_by_arc_length(curve, N, normalized = True):
+    """ Reparameterize a 2D curve by its arc length.
+    Parameters
+    ----------
+    curve : np.array
+        An array of shape (nb_frame, 2) representing the 2D curve.
+    N : int
+        The number of points in the output curve.
+    Returns
+    -------
+    newdelta : np.array
+        An array of shape (N,) representing the new arc length parameterization.
+    arc_length_parametrized_curve : np.array
+        An array of shape (N, 2) representing the curve reparameterized by arc length.
+    """
+    dim = curve.shape[1]
+    length = compute_length(curve)
+    deltas = np.linalg.norm(np.diff(curve, axis=0), axis=1) + 1e-6
+    deltas = np.insert(deltas, 0, 0.0)
+    cumdelta = np.cumsum(deltas)
+    if normalized:
+        cumdelta = cumdelta/length
+        newdelta = np.linspace(0, 1, N)
+    else:
+        newdelta = np.linspace(0, length, N) 
+    #newdelta[-1] = cumdelta[-1] # ensure the last point matches exactly
+
+    # Interpolate to uniform arc-length
+    arc_length_parametrized_curve = np.zeros((N, dim))
+    for i in range(dim):
+        arc_length_parametrized_curve[:, i] = interp1d(cumdelta, curve[:, i], kind="linear", fill_value="extrapolate")(newdelta)
+    return newdelta,arc_length_parametrized_curve
+
+def compute_length(curve):
+    """ Compute the length of a 2D curve.
+    Parameters
+    ----------
+    curve : np.array
+        An array of shape (N, 2) where N is the number of points.
+    Returns
+    -------
+    length : float
+        The length of the curve.
+    """
+    length = 0
+    for i in range(curve.shape[0]-1):
+        length += np.linalg.norm(curve[i+1,:]-curve[i,:])
+    return length
+
+
+def one_polygon_per_class(polygons, labels):
+    """Return first polygon found for each class label."""
+    selected = {}
+    for poly, lab in zip(polygons, labels):
+        selected.setdefault(lab, poly)
+    return selected
+
+
+def plot_polygon(ax, poly, *, color="k", lw=1, close=True):
+    """Plot a complex-valued polygon on an axis."""
+    pts = np.asarray(poly, dtype=complex)
+
+    if close:
+        pts = np.r_[pts, pts[0]]  # close polygon
+
+    ax.plot(pts.real, pts.imag, color=color, linewidth=lw)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
+def local_pca(data, labels):
+    """
+    LPCA is a visualization procedure that computes 2D positions of labelled
+    datapoints from a high-dimensional dataset by performing a global PCA
+    followed by local PCAs in each class.
+    """
+    nb_of_samples, dim = data.shape
+    nb_of_classes = len(np.unique(labels))
+    
+    # Global PCA
+    global_PCA = PCA(n_components=None).fit(data)
+    eigenvectors, eigenvalues = global_PCA.components_, global_PCA.explained_variance_
+    cumulative_variance = np.cumsum(global_PCA.explained_variance_ratio_)
+    estimated_global_dimension = np.where(cumulative_variance >= 0.99)[0][0]
+
+    global_mean = np.mean(data, axis=0)
+    data_in_global_PCA = global_PCA.transform(data)[:, :estimated_global_dimension]
+    mean_data_in_global_PCA = np.mean(data_in_global_PCA, 0)
+
+    dimension_per_class = np.zeros(nb_of_classes, dtype=int)
+    dist_inter_class = []
+    vectors = np.zeros((nb_of_classes, 2))
+    centroid_positions = np.zeros((nb_of_classes, 2))
+    rotation = []
+    PCAs_per_class = []
+    
+    for i in range(nb_of_classes):
+        class_data = data_in_global_PCA[labels == i]
+        class_PCA = PCA(n_components=None).fit(class_data)
+        PCAs_per_class.append(class_PCA)
+        mean_class_data = np.mean(class_data, axis=0)
+        
+        cumulative_variance_class = np.cumsum(class_PCA.explained_variance_ratio_)
+        dimension_per_class[i] = np.where(cumulative_variance_class >= 0.99)[0][0]
+        
+        # Distance between class mean and global mean
+        dist_inter_class.append(np.linalg.norm(mean_data_in_global_PCA - mean_class_data))
+        mean_displacement = mean_class_data[0:2] - mean_data_in_global_PCA[0:2]
+        normalizing_term = np.linalg.norm(mean_displacement)  # ← FIXED
+        vectors[i] = mean_displacement / normalizing_term
+        centroid_positions[i] = dist_inter_class[i] * vectors[i]
+        
+        # Rotation angle
+        projection_eigenvector_class = class_PCA.components_[0][0:2] / np.linalg.norm(class_PCA.components_[0][0:2])
+        if projection_eigenvector_class[1] > 0:
+            angle = np.arccos(projection_eigenvector_class[0])
+        elif projection_eigenvector_class[1] < 0:
+            angle = -np.arccos(projection_eigenvector_class[0])
+        else:
+            angle = 0
+        rotation.append([[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    
+    global_positions = np.zeros((nb_of_samples, 2))
+    
+    for i in range(nb_of_samples):
+        for j in range(nb_of_classes):
+            if labels[i] == j:
+
+                centered_point = data_in_global_PCA[i, :] - PCAs_per_class[j].mean_
+                positions = PCAs_per_class[j].components_ @ data_in_global_PCA[i, :]
+                
+                # Scale by global eigenvalues
+                positions[0] = positions[0] #* np.sqrt(eigenvalues[0])
+                positions[1] = positions[1] #* np.sqrt(eigenvalues[1])
+                
+                # Rotate
+                positions_2d = rotation[j] @ positions[0:2]
+                
+                # Translate to class centroid
+                global_positions[i, 0] = positions_2d[0] + centroid_positions[j, 0]
+                global_positions[i, 1] = positions_2d[1] + centroid_positions[j, 1]
+    
+    amb_space = min(nb_of_samples, dim)
+    print(f"Dimension of ambient space: {amb_space},\nEstimated global dimension: {estimated_global_dimension},\n"
+          f"The estimated dimensions per class are: {dimension_per_class}, \n"
+          f"Upper bound local dimension = {max(dimension_per_class)}, \n"
+          f"Centroids positions = {centroid_positions}")
+
+    return global_positions
+
+

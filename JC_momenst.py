@@ -62,6 +62,8 @@ def MomentTripleSum(p,q,r,z,w):
     """The pqr moment of the segment zw, where z and w are complex numbers"""
     multiplier = pow(w-z,r)/pow(abs(w-z),r-1)
     acc = 0
+    if np.isnan(multiplier):
+         print("NAN encountered in MomentTripleSum with inputs:", p,q,r,z,w)
     for k in range(0,p+1):
         for l in range(0,q+1):
             acc = acc + choose(p,k) * choose(q,l) * innermost(p,q,z,w,k,l)
@@ -80,6 +82,153 @@ def affine(X):
     return z*z - 4*(x*x + y*y)
 
 
+def moment_hu(p,q,X):
+    """
+    The Hu moment invariant of order p+q+1 formed with the moments m_{p,q,0} and m_{p,q+1,1}.
+    """
+    return Moment(p, q+1, 1, X) / (2j * (q+1))
+
+def HuInvariants(X, normalize=False):
+    """
+    Compute Flusser rotation invariants up to order 3
+    for polygon X (tuple of complex numbers).
+
+    If normalize=True, returns similarity invariants
+    (scale invariant).
+    """
+
+    # --- helper ---
+    def c(p,q,X):
+        return Moment(p, q+1, 1, X) / (2j * (q+1))
+
+    Xc = Normalize(X)
+
+    c11 = c(1,1,Xc)
+
+    c20 = c(2,0,Xc)
+    c02 = c(0,2,Xc)
+
+    c30 = c(3,0,Xc)
+    c03 = c(0,3,Xc)
+
+    c21 = c(2,1,Xc)
+    c12 = c(1,2,Xc)
+
+    I1 = c11
+    I2 = c20 * c02
+    I3 = c30 * c03
+    I4 = c21 * c12
+    I5 = np.real(c30*c12**3)
+    I6 = np.real(c20*c12**2)
+    I7 = np.imag(c30*c12**3)
+
+    invariants = {
+        "I2": I2,
+        "I3": I3,
+        "I4": I4,
+        "I5": I5,
+        "I6": I6,
+        "I7": I7
+    }
+
+    # --- 6) optional scale normalization ---
+    if normalize:
+        # c11 has scaling degree 2
+        s2 = c11
+        s3 = c11**2
+        s4 = c11**3
+
+        invariants = {
+            "I2": I2 / s2,
+            "I3": I3 / s3,
+            "I4": I4 / s4,
+            "I5": I5 / s4,
+            "I6": I6 / s4
+        }
+
+    return invariants
+
+def FlusserFullInvariants(X):
+    """
+    Compute Flusser's full set of independent rotation invariants
+    (11 invariants) for a polygon X (tuple of complex numbers).
+    All central moments computed once.
+    """
+
+    # --- helper: complex central moments ---
+    def c(p,q,X):
+        return Moment(p, q+1, 1, X) / (2j * (q+1))
+
+    # --- 2) centralize polygon ---
+    Xc = Normalize(X)
+
+    # --- 3) compute all needed moments once ---
+    c11 = c(1,1,Xc)
+    c20 = c(2,0,Xc)
+    c21 = c(2,1,Xc)
+    c12 = c(1,2,Xc)
+    c30 = c(3,0,Xc)
+    c31 = c(3,1,Xc)
+    c40 = c(4,0,Xc)
+    c22 = c(2,2,Xc)
+
+    # --- 4) compute the invariants ---
+    invariants = {
+        "F1": c11,
+        "F2": c21 * c12,
+        "F3": (c20 * (c12**2)).real,
+        "F4": (c20 * (c12**2)).imag,
+        "F5": (c30 * (c12**3)).real,
+        "F6": (c30 * (c12**3)).imag,
+        "F7": c22,
+        "F8": (c31 * (c12**2)).real,
+        "F9": (c31 * (c12**2)).imag,
+        "F10": (c40 * (c12**4)).real,
+        "F11": (c40 * (c12**4)).imag
+    }
+
+    return invariants
+
+def flusser_invariants_norm(X):
+    """
+    Compute Flusser's full set of independent rotation invariants
+    (11 invariants) for a polygon X (tuple of complex numbers).
+    All central moments computed once.
+    """
+
+    # --- helper: complex central moments ---
+    def c(p,q,X):
+        return Moment(p, q+1, 1, X) / (2j * (q+1))
+
+    # --- 2) centralize polygon ---
+    Xc = Normalize(X)
+
+    # --- 3) compute all needed moments once ---
+    c11 = c(1,1,Xc)
+    c20 = c(2,0,Xc)
+    c21 = c(2,1,Xc)
+    c12 = c(1,2,Xc)
+    c30 = c(3,0,Xc)
+    c31 = c(3,1,Xc)
+    c40 = c(4,0,Xc)
+    c22 = c(2,2,Xc)
+
+    # --- 4) compute the invariants ---
+    invariants = {
+        "F1": c11,
+        "F2": c21 * c12,
+        "F3": (c20 * (c12**2)).real,
+        "F4": (c20 * (c12**2)).imag,
+        "F5": (c30 * (c12**3)).real,
+        "F6": (c30 * (c12**3)).imag,
+        "F7": c22,
+        "F8": (c31 * (c12**2)).real,
+        "F9": (c31 * (c12**2)).imag,
+        "F10": (c40 * (c12**4)).real,
+        "F11": (c40 * (c12**4)).imag
+    }
+
+    return invariants
 
 ### Normalizing polygons
 
@@ -271,11 +420,11 @@ def RePerturb(polygon,n=2,epsilon=0.05):
 ### Normalizing polygons
 
 
-def Normalize(X):
+def Normalize(X, size = 10):
        """Displaces a polygon so that its center of mass lies at the origin
        and dilates it so its area equals 10"""
        CM = CenterMass(X)
-       a = math.sqrt(area(X)/10)
+       a = math.sqrt(area(X)/size)
        return tuple(map(lambda x: (x-CM)/a, X))
 
 
@@ -314,6 +463,7 @@ def features2(polygon):
 ## The output of the Features is a tuple, but you can make it into an np array using
 ## np.asarray(Features(your polygon)). 
 
+### A LOT OF INVARIANTS ###
 def Features(polygon):
         "All moment invariants computed with moments of orders 0,1,2,and 3"
         X = Normalize(polygon)
@@ -409,7 +559,7 @@ def Features(polygon):
                 m012*m002*m003.conjugate(), 
                 m012*m002*m102.conjugate())
 
-
+### ACTUALLY OLD FEATURES ###
 def features_new(polygon):
     """
     All moment invariants computed with moments of orders 0, 1, 2, and 3.
@@ -482,21 +632,366 @@ def features_new(polygon):
     return features_dict
 
 
-##########################################################################            
-          
+
+#### OFFICIAL INVARIANTSSSSS ###
+
+def vtld(polygon, Norm = True, moment_dict = None):
+    "Variance of the distribution of distances from tangent lines to cm"
+    
+    if moment_dict is None:
+        moment_dict = {}
+
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+    m000 = get_moment(moment_dict, X, 0,0,0).real
+    m = 2*area(X)/m000
+    m022 = get_moment(moment_dict, X, 0,2,2).real
+    m110 = get_moment(moment_dict, X, 1,1,0).real
+    return (m110 - m022)/(2*m000) - m**2
+
+def msdb(polygon, Norm = True, moment_dict = None):
+    "Mean of square distance from boundary to center of mass"
+    
+    if moment_dict is None:
+        moment_dict = {}
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+    return get_moment(moment_dict, X, 1,1,0)/get_moment(moment_dict, X, 0,0,0)
+
+def vsdb(polygon, Norm = True , moment_dict = None):
+    "Variance of square distance from boundary to center of mass"
+
+    if moment_dict is None:
+        moment_dict = {}
+
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+    m000 = get_moment(moment_dict, X, 0,0,0)
+    m110 = get_moment(moment_dict, X, 1,1,0)
+    m220 = get_moment(moment_dict, X, 2,2,0)
+    return m220/m000 - (m110/m000)**2 
+
+def dist2cm(polygon, Norm = True , moment_dict = None):
+    "TO DO "
+ 
+    if moment_dict is None:
+        moment_dict = {}
+
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+
+    m011 = get_moment(moment_dict, X, 0,1,1).imag
+    m121 = get_moment(moment_dict, X, 1,2,1).imag
+    m1 = m121/(2*m011)
+    m231 = get_moment(moment_dict, X, 2,3,1).imag
+    m2 = m231/(3*m011)
+    m2c = m2 - m1**2
+    m341 = get_moment(moment_dict, X, 3,4,1).imag
+    m3 = m341/(4*m011)
+    m3c = m3 - 3*m1*m2 + 2*m1**3
+    skewness = m3c/math.sqrt(m2c)**3
+    m451 = get_moment(moment_dict, X, 4,5,1).imag
+    m4 = m451/(5*m011) 
+    m4c = m4 - 4*m1*m3 + 6*m2*m1**2 - 3*m1**4
+    kurtosis = m4c/m2c**2
+
+    return (m1,m2c,skewness,kurtosis)
+
+def skewsdb(polygon, Norm = True, moment_dict = None):
+    "Skewness of square distance from boundary to center of mass" 
 
 
+    if moment_dict is None:
+        moment_dict = {}
+    
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+    
+    m000 = get_moment(moment_dict, X, 0,0,0)
+    m110 = get_moment(moment_dict, X, 1,1,0)
+    m220 = get_moment(moment_dict, X, 2,2,0)
+    m330 = get_moment(moment_dict, X, 3,3,0)
+    m3   = (m330/m000 - 3*m220*m110/m000**2 + 2*(m110/m000)**3).real 
+    m2   = vsdb(X, Norm=False, moment_dict = moment_dict).real  
+    return m3/math.sqrt(m2**3)
+
+def kurtosissdb(polygon, Norm = True, moment_dict = None):
+    "Kurtosis of square distance from boundary to center of mass" 
+
+    if moment_dict is None:
+        moment_dict = {}
+    
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+    
+    m000 = get_moment(moment_dict, X, 0,0,0).real
+    m110 = get_moment(moment_dict, X, 1,1,0).real
+    m220 = get_moment(moment_dict, X, 1,1,0).real
+    m330 = get_moment(moment_dict, X, 3,3,0).real
+    m440 = get_moment(moment_dict, X, 4,4,0).real
+    m2   = vsdb(X, Norm = False, moment_dict = moment_dict).real
+    m4   = m440/m000 - 4*m330*m110/m000**2 + 6*(m220*m110**2)/m000*3 - 3*(m110/m000)**4
+    return m4/m2**2 
+
+def point2line(polygon, Norm = True, moment_dict = None):
+    
+    if moment_dict is None:
+        moment_dict = {}
+
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+    m000 = get_moment(moment_dict, X, 0,0,0).real
+    m1 = -2*area(X)/m000
+    m100 = get_moment(moment_dict, X, 1,0,0)
+    m110 = get_moment(moment_dict, X, 1,1,0).real
+    m020 = get_moment(moment_dict, X, 0,2,0)
+    m002 = get_moment(moment_dict, X, 0,0,2)
+    m012 = get_moment(moment_dict, X, 0,1,2)
+    m022 = get_moment(moment_dict, X, 0,2,2)
+    a = (m020*m002).real
+    b = (m012*m100.conjugate()).real
+    m2 = ((-1/2)*(a - 2*b + m000*m022.real) + m000*m110 - abs(m100)**2)/m000**2
+    m2c = m2 - m1**2
+    m030 = get_moment(moment_dict, X, 0,3,0)
+    m003 = get_moment(moment_dict, X, 0,0,3)
+    m013 = get_moment(moment_dict, X, 0,1,3)
+    m023 = get_moment(moment_dict, X, 0,2,3)
+    m033 = get_moment(moment_dict, X, 0,3,3)
+    m121 = get_moment(moment_dict, X, 1,2,1).imag
+    x = (m030*m003 - 3*m020*m013 + 3*m023*m100.conjugate() - m033).imag
+    y = -3*m110*area(X) - 3*m000*m121.imag/4
+    m3 = (-x/4 + y)/m000**2
+    m3c = m3 - 3*m1*m2 + 2*m1**2
+    return (m2c, m3c/math.sqrt(m2c)**3)
+
+def borderdets(polygon, Norm = True, moment_dict = None):
+    """ TO DO """
+
+    if moment_dict is None:
+        moment_dict = {}
+
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+
+    m000 = get_moment(moment_dict, X, 0,0,0).real
+    m002 = get_moment(moment_dict, X, 0,0,2)
+    m2 = (m000**2 - abs(m002)**2)/(2*m000**2)
+    m004 = get_moment(moment_dict, X, 0,0,4)
+    m4 = (abs(m004)**2 - 4*abs(m002)**2 + 3*m000**2)/(8*m000**2)
+    return(m2,m4/m2**2)
+########################################################################
+def features_CP(polygon):
+    "Testing the idea of moment invariants as points in R^k x CP^n"
+    X = Normalize(polygon)
+    m000 = Moment(0,0,0,X).real
+    m100 = Moment(1,0,0,X)
+    m200 = Moment(2,0,0,X)
+    m110 = Moment(1,1,0,X).real
+    m002 = Moment(0,0,2,X)
+    m210 = Moment(2,1,0,X)
+    m012 = Moment(0,1,2,X)
+    m220 = Moment(2,2,0,X).real
+    m121 = Moment(1,2,1,X).imag
+    m022 = Moment(0,2,2,X)
+    m310 = Moment(3,1,0,X)
+    m211 = Moment(2,1,1,X)
+    m112 = Moment(1,1,2,X)
+    m013 = Moment(0,1,3,X)
+    m003 = Moment(0,0,3,X)
+    m113 = Moment(1,1,3,X)
+    m014 = Moment(0,1,4,X)
+    m223 = Moment(2,2,3,X)
+    m212 = Moment(2,1,2,X)
+    m311 = Moment(3,1,1,X)
+    m300 = Moment(3,0,0,X)
+    m410 = Moment(4,1,0,X)
+    m322 = Moment(3,2,2,X)
+    m300 = Moment(3,0,0,X)
+    m333 = Moment(3,3,3,X)
+
+    features_list = [m000,
+                        m110,
+                        m220,
+                        m121,
+                        m022,
+                        m100**2,
+                        m210**2,
+                        m012**2,
+                        m200,
+                        m002,
+                        m310,
+                        m211,
+                        m112,
+                        m013,
+
+                        m003,
+                        m113,
+                        m014,
+                        m223,
+                        m212,
+                        m311,
+                        m300,
+                        m410,
+                        m322,
+                        m300,
+                        m333,
+                        ] 
+    for i, moment in enumerate(features_list):
+        if i>0 and i<5:
+            features_list[i] = moment/m000
+        elif i>4 and i<14:
+            features_list[i] = moment/m211
+        elif i > 13:
+            features_list[i] = moment/m333
+             
+    features_dict = {f"feature_{idx+1}": val for idx, val in enumerate(features_list)}
+    return features_dict
+
+def Normalized_Features(polygon):
+    "Testing the idea of moment invariants as points in R^k x CP^n"
+    X = Normalize(polygon)
+    m000 = Moment(0,0,0,X).real
+    m100 = Moment(1,0,0,X)/m000
+    m200 = Moment(2,0,0,X)/m000
+    m110 = Moment(1,1,0,X).real/m000
+    m220 = Moment(2,2,0,X).real/m000
+    m121 = Moment(1,2,1,X).imag
+    m022real = Moment(0,2,2,X).real
+    m022imag = Moment(0,2,2,X).imag
+    m002 = Moment(0,0,2,X)
+    m210 = Moment(2,1,0,X)/m000
+    m012 = Moment(0,1,2,X)
+    m310 = Moment(3,1,0,X)/m000
+    m211 = Moment(2,1,1,X)
+    m112 = Moment(1,1,2,X)
+    m013 = Moment(0,1,3,X)
+    features_list = [m110,
+                        m220,
+                        m121,
+                        m022real,
+                        m022imag,
+                        m100**2,
+                        m210**2,
+                        m012**2,
+                        m200,
+                        m002,
+                        m310,
+                        m211,
+                        m112,
+                        m013]
+
+    features_dict = {f"feature_{idx+1}": val for idx, val in enumerate(features_list)}
+    
+    return features_dict
+    
+def compute_moments(X, moment_list):
+    cache = {}
+    for (p,q,r) in moment_list:
+        cache[(p,q,r)] = Moment(p,q,r,X)
+    return cache
+
+def get_moment(moment_dict, X, p, q, r):
+    key = (p, q, r)
+    if key in moment_dict:
+        return moment_dict[key]
+    print(f"The moment m_{{{p},{q},{r}}} is not in the cache. Computing it now.")
+    print(moment_dict.keys())
+    val = Moment(p, q, r, X)
+    moment_dict[key] = val
+    return val
+def features_13(polygon):
+
+    polygon_ = Normalize(polygon, size = 1)
+
+    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1),]
+    cache_moments = compute_moments(polygon_, moments_list)
+
+    I1 = msdb(polygon_, False, moment_dict = cache_moments)
+    I2 = vsdb(polygon_, False, moment_dict = cache_moments)
+    I3 = skewsdb(polygon_, False, moment_dict = cache_moments)
+    I4 = kurtosissdb(polygon_, False, moment_dict = cache_moments)
+
+    m100 = get_moment(cache_moments, polygon_, 1,0,0)
+    m000 = get_moment(cache_moments, polygon_, 0,0,0)
+    I5 = abs(m100/m000)
+
+    m311 = get_moment(cache_moments, polygon_, 3,1,1)
+    m011 = get_moment(cache_moments, polygon_, 0,1,1)
+    I6 = abs(m311/m011)
+
+    m002 = get_moment(cache_moments, polygon_, 0,0,2)
+    m003 = get_moment(cache_moments, polygon_, 0,0,3)
+
+    I7= np.imag(m002)/m000
+    I8 = np.real(m003)/m000
+
+    I9 = vtld(polygon_, False, moment_dict = cache_moments)
+    I10 = point2line(polygon_, False, moment_dict = cache_moments)[0]
+    I11 = borderdets(polygon_, False,moment_dict = cache_moments)[0]
+
+    invariants = {
+        "JC1": I1,
+        "JC2": I2,
+        "JC3": I3,
+        "JC4": I4,
+        "JC5": I5,
+        "JC6": I6,
+        "JC7": I7,
+        "JC8": I8,
+        "JC9": I9,
+        "JC10": I10,
+        "JC11": I11
+    }
+
+    return invariants
+
+def thirteen(x):
+    "The thirteen invariants"
+
+    X = Normalize(X, size = 1)
+
+    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1),]
+    cache_moments = compute_moments(X, moments_list)
+
+    m000 = get_moment(cache_moments, X, 0,0,0).real
+    m100 = get_moment(cache_moments, X, 1,0,0)
+    m011 = get_moment(cache_moments, X, 0,1,1).imag
+    m311 = get_moment(cache_moments, X, 3,1,1)
+    m022 = get_moment(cache_moments, X, 0,2,2)
+    m033 = get_moment(cache_moments, X, 0,3,3)
+    I1, I2, I3, I4 = dist2cm(X, norm = False, moment_dict= cache_moments)
+    return (I1, I2, I3, I4,
+            linear_inv(x)[0], linear_inv(x)[1],abs(m100/m000),abs(m311/m011),
+            m022.imag/m000,m033.real/m000,borderdets(x)[0],vtld(x),point2line(x)[0])
 ### I completely forgot why I was doing this !
 def clean(string,k):
-       "This is used to format the features for the csv file"
-       acc = ''
-       for x in string:
-           if x != ' ' and x != '(' and x != ')':
-              acc = acc + x
-       acc = acc + ',' + str(k)       
-       return acc
+    "This is used to format the features for the csv file"
+    acc = ''
+    for x in string:
+        if x != ' ' and x != '(' and x != ')':
+            acc = acc + x
+    acc = acc + ',' + str(k)       
+    return acc
 
-
+def linear_inv(polygon):
+    """TO DO, THIS IS JUST A STUBB """
+    return (Moment(1,0,0,polygon), Moment(0,1,0,polygon))
 ### Small project: print out the features of three polygons directly to a .csv file.
 
 #### IMPORTANT : Check the computations of moments.
@@ -538,14 +1033,3 @@ def TPNL(polygon):
     acc.append(polygon[0].conjugate() * (-1j) 
                * (polygon[0] - polygon[n-1])/abs(polygon[0] - polygon[n-1]))
     return acc  
-
-
-## Trying the diagram with an ellipse.
-t = np.linspace(0,2*np.pi,100)
-x = 2*np.cos(t)
-y = np.sin(t)
-Elipse = tuple(map(complex,x,y))
-xprime = -2*np.sin(t)
-yprime = np.cos(t)
-Elipseprime = tuple(map(complex, xprime,yprime))
-Elipsenormals = tuple(map(lambda z: -1j*z/abs(z), Elipseprime))
