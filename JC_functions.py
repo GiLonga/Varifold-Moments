@@ -15,6 +15,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from umap import UMAP
 from sklearn.decomposition import PCA
 from  scipy.interpolate import interp1d
+import numpy as np
 
 ## Some Basic Polygons
 
@@ -204,18 +205,6 @@ def Draw(polygon):
 
     ### From Scheme to Python : moments.ss 
 
-import numpy as np
-
-def CyclicSum(func, atuple):
-    """Given a function of two variables func(x,y) and a list with at least three
-    entries, alist  = (a1 a2 a3 ... an), this function computes the cyclic sum 
-    f(a1,a2) + f(a2,a3)  + ... + f(an,a1)."""
-    acc = func(atuple[-1], atuple[0])
-    for x in range(len(atuple) - 1):
-        acc = acc + func(atuple[x],atuple[x+1])
-    return acc 
-
-
 def sort(atuple):
     """ sorting a tuple without side effects."""
     return tuple(sorted(atuple))
@@ -329,14 +318,6 @@ def Draw(polygon):
     plt.xlim(-5,5)
     plt.ylim(-5,5)
     plt.plot(Real(polygon), Imag(polygon), linewidth=4, color='black')
-    
-## It would be nice to make the polygonal line slightly thicker.   
-    
-   ### Constructing and Transforming Polygons ###
-
-
-
-
 
 ## Some Basic Polygons
 
@@ -640,6 +621,7 @@ def remove_duplicate_vertices(X, tol=1e-12):
 
 import numpy as np
 import matplotlib.colors as mcolors
+import glasbey
 
 def generate_distinct_colors(n):
     hues = np.linspace(0, 1, n, endpoint=False)
@@ -665,7 +647,8 @@ def plot_2D(X, labels):
     plt.figure(figsize=(18, 12))
 
     n_clusters = len(np.unique(labels))
-    colors = generate_distinct_colors(n_clusters)
+    colors = glasbey.create_palette(palette_size=n_clusters)
+    #colors = generate_distinct_colors(n_clusters)
     for i, (name, model) in enumerate(methods.items(), 1):
         plt.subplot(2, 3, i)
 
@@ -841,3 +824,43 @@ def local_pca(data, labels):
     return global_positions
 
 
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+def RF_classifier(X_scaled, labels):
+    X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, labels,
+    test_size=0.25,
+    random_state=42,
+    stratify=labels
+)
+
+
+
+    rf = RandomForestClassifier(
+    n_estimators=500,
+    max_depth=None,
+    min_samples_split=2,
+    min_samples_leaf=1,
+    max_features="sqrt",
+    bootstrap=True,
+    n_jobs=-1,
+    random_state=42
+)
+
+    rf.fit(X_train, y_train)
+
+
+
+    y_pred = rf.predict(X_test)
+
+    acc = accuracy_score(y_test, y_pred)
+    print(f"Test accuracy: {acc:.4f}")
+
+    print("\nClassification report:")
+    print(classification_report(y_test, y_pred))
+
+    print("\nConfusion matrix:")
+    print(confusion_matrix(y_test, y_pred))

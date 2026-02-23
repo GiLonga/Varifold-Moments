@@ -677,8 +677,29 @@ def vsdb(polygon, Norm = True , moment_dict = None):
     m220 = get_moment(moment_dict, X, 2,2,0)
     return m220/m000 - (m110/m000)**2 
 
+def linear_inv(polygon, Norm = True , moment_dict = None):
+    """TO DO """
+
+    if moment_dict is None:
+        moment_dict = {}
+
+    if Norm:
+        X = Normalize(polygon, size = 1)
+    else:
+        X = polygon
+
+    m031 =  get_moment(moment_dict, X, 0,3,1)
+    m121 =  get_moment(moment_dict, X, 1,2,1).imag
+    area =  get_moment(moment_dict, X, 0,1,1).imag/2 
+    m2 = (1/8)*((-abs(m031)**2)/9 + (m121**2)/4)/area**2 
+    m051 =  get_moment(moment_dict, X, 0,5,1) 
+    m321 =  get_moment(moment_dict, X, 3,2,1)
+    m231 =  get_moment(moment_dict, X, 2,3,1).imag
+    m4 = (1/32)*((abs(m051)**2)/25 - abs(m321)**2 + (m231**2)/3)/area**2
+    return (m2,m4/(m2**2))    
+
 def dist2cm(polygon, Norm = True , moment_dict = None):
-    "TO DO "
+    "mean, variance, skewness and kurtosis coefficients of the square distances from the center of mass"
  
     if moment_dict is None:
         moment_dict = {}
@@ -910,8 +931,7 @@ def get_moment(moment_dict, X, p, q, r):
     key = (p, q, r)
     if key in moment_dict:
         return moment_dict[key]
-    print(f"The moment m_{{{p},{q},{r}}} is not in the cache. Computing it now.")
-    print(moment_dict.keys())
+    print(f"The moment m_{{{p},{q},{r}}} is not in the cache. Computing it now. \nAdd it in the manually to the list of moments to compute if you want to avoid this in the future.")
     val = Moment(p, q, r, X)
     moment_dict[key] = val
     return val
@@ -961,12 +981,12 @@ def features_13(polygon):
 
     return invariants
 
-def thirteen(x):
+def thirteen( X ):
     "The thirteen invariants"
 
     X = Normalize(X, size = 1)
 
-    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1),]
+    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1), (2,3,1), (3,4,1), (4,5,1),  (0,3,1), (0,5,1), (3,2,1)]
     cache_moments = compute_moments(X, moments_list)
 
     m000 = get_moment(cache_moments, X, 0,0,0).real
@@ -976,9 +996,32 @@ def thirteen(x):
     m022 = get_moment(cache_moments, X, 0,2,2)
     m033 = get_moment(cache_moments, X, 0,3,3)
     I1, I2, I3, I4 = dist2cm(X, Norm = False, moment_dict= cache_moments)
-    return (I1, I2, I3, I4,
-            linear_inv(x)[0], linear_inv(x)[1],abs(m100/m000),abs(m311/m011),
-            m022.imag/m000,m033.real/m000,borderdets(x)[0],vtld(x),point2line(x)[0])
+    I5, I6 = linear_inv(X, Norm = False, moment_dict= cache_moments)
+    I7 = abs(m100/m000)
+    I8 = abs(m311/m011)
+    I9 =  m022.imag/m000
+    I10 = m033.real/m000
+    I11 = borderdets(X, False,moment_dict = cache_moments)[0]
+    I12 = vtld(X, False, moment_dict = cache_moments)
+    I13 = point2line(X, False, moment_dict = cache_moments)[0]
+
+    invariants = {
+        "JC1": I1,
+        "JC2": I2,
+        "JC3": I3,
+        "JC4": I4,
+        "JC5": I5,
+        "JC6": I6,
+        "JC7": I7,
+        "JC8": I8,
+        "JC9": I9,
+        "JC10": I10,
+        "JC11": I11,
+        "JC12": I12,
+        "JC13": I13
+    }
+
+    return invariants
 ### I completely forgot why I was doing this !
 def clean(string,k):
     "This is used to format the features for the csv file"
@@ -989,9 +1032,6 @@ def clean(string,k):
     acc = acc + ',' + str(k)       
     return acc
 
-def linear_inv(polygon):
-    """TO DO, THIS IS JUST A STUBB """
-    return (Moment(1,0,0,polygon), Moment(0,1,0,polygon))
 ### Small project: print out the features of three polygons directly to a .csv file.
 
 #### IMPORTANT : Check the computations of moments.
