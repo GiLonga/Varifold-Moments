@@ -140,3 +140,51 @@ def RandomShape500(shape_fn, N=500):
     poly = tuple(z + shift for z in poly)
 
     return poly
+
+def OrientCCW(polygon):
+    """
+    Ensures polygon is counter-clockwise oriented.
+    If polygon is clockwise, it is reversed.
+    """
+    if area(polygon) < 0:
+        return tuple(reversed(polygon))
+    return polygon
+
+def GenerateShapeArray(
+        samples_per_class=100,
+        points_per_shape=500,
+        perturbation_strength=0.02):
+
+    polygons = []
+    labels = []
+    seed = 42
+    random.seed(seed)
+    np.random.seed(seed)
+    for label, (name, shape_fn) in enumerate(SHAPES):
+        for _ in range(samples_per_class):
+
+            poly = ResampleArcLength(shape_fn(), points_per_shape)
+            poly = Rotate(random.uniform(0, 2 * math.pi), poly)
+
+            scale = random.uniform(0.7, 1.8)
+            poly = tuple(scale * z for z in poly)
+
+            # Perturbation:
+            poly = tuple(
+                z + complex(
+                    random.uniform(-perturbation_strength, perturbation_strength),
+                    random.uniform(-perturbation_strength, perturbation_strength)
+                )
+                for z in poly
+            )
+
+            poly = ResampleArcLength(poly, points_per_shape)
+            poly = OrientCCW(poly)
+
+            #I NORMALIZE AGAIN JUST FOR SAFETY
+            poly = Normalize(poly)
+
+            polygons.append(poly)
+            labels.append(label)
+
+    return np.array(polygons, dtype=object), np.array(labels)
