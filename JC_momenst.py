@@ -939,7 +939,7 @@ def features_13(polygon):
 
     polygon_ = Normalize(polygon, size = 1)
 
-    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1),]
+    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1), (0,3,1), (0,5,1), (3,2,1), (2,3,1)]
     cache_moments = compute_moments(polygon_, moments_list)
 
     I1 = msdb(polygon_, False, moment_dict = cache_moments)
@@ -965,6 +965,10 @@ def features_13(polygon):
     I10 = point2line(polygon_, False, moment_dict = cache_moments)[0]
     I11 = borderdets(polygon_, False,moment_dict = cache_moments)[0]
 
+    I12, I13 = linear_inv(polygon_, Norm = False, moment_dict= cache_moments)
+    
+
+
     invariants = {
         "JC1": I1,
         "JC2": I2,
@@ -976,7 +980,9 @@ def features_13(polygon):
         "JC8": I8,
         "JC9": I9,
         "JC10": I10,
-        "JC11": I11
+        "JC11": I11,
+        "JC12": I12,
+        "JC13": I13,
     }
 
     return invariants
@@ -995,12 +1001,20 @@ def thirteen( X ):
     m311 = get_moment(cache_moments, X, 3,1,1)
     m022 = get_moment(cache_moments, X, 0,2,2)
     m033 = get_moment(cache_moments, X, 0,3,3)
+
+    # Mean, Variance, Skewness and Kurtosis of the distribution of distances from boundary to center of mass (Entire Area) 
     I1, I2, I3, I4 = dist2cm(X, Norm = False, moment_dict= cache_moments)
+
     I5, I6 = linear_inv(X, Norm = False, moment_dict= cache_moments)
+
     I7 = abs(m100/m000)
+
     I8 = abs(m311/m011)
+
+    #These returns symmetry.
     I9 =  m022.imag/m000
     I10 = m033.real/m000
+
     I11 = borderdets(X, False,moment_dict = cache_moments)[0]
     I12 = vtld(X, False, moment_dict = cache_moments)
     I13 = point2line(X, False, moment_dict = cache_moments)[0]
