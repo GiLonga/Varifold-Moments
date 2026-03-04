@@ -366,10 +366,13 @@ def Subdivide(atuple, func= lambda x,y: (x+y)/2):
     return tuple(res)
 
 def ReSubdivide(polygon,n=3):
-       X = polygon 
-       for k in range(n):
-           X = Subdivide(X)
-       return X 
+    """
+    TO DO
+    """
+    X = polygon 
+    for k in range(n):
+        X = Subdivide(X)
+    return X 
 
 
 
@@ -986,6 +989,15 @@ def features_13(polygon):
     }
 
     return invariants
+
+def all_moments(polygon, moments_list):
+    """
+    compute all the moments given a list of integers (p,r,q)
+    """
+    polygon_ = Normalize(polygon, size = 1)
+    cache_moments = compute_moments(polygon_, moments_list)
+
+    return list(cache_moments.items())
 
 def thirteen( X ):
     "The thirteen invariants"
