@@ -8,6 +8,9 @@
 import math
 import random
 import numpy as np
+from math import comb
+import cmath
+import cv2
 
 def CyclicSum(func, atuple):
     """Given a function of two variables func(x,y) and a list with at least three
@@ -59,14 +62,40 @@ def innermost(p,q,z,w,k,l):
 ## Now we can easily write the triple sum.
 
 def MomentTripleSum(p,q,r,z,w):
-    """The pqr moment of the segment zw, where z and w are complex numbers"""
-    multiplier = pow(w-z,r)/pow(abs(w-z),r-1)
-    acc = 0
+    """Optimized pqr moment of segment zw."""
+    multiplier = (w - z) ** r / abs(w - z) ** (r - 1)
     if np.isnan(multiplier):
-         print("NAN encountered in MomentTripleSum with inputs:", p,q,r,z,w)
-    for k in range(0,p+1):
-        for l in range(0,q+1):
-            acc = acc + choose(p,k) * choose(q,l) * innermost(p,q,z,w,k,l)
+        print("NAN encountered in MomentTripleSum with inputs:", p, q, r, z, w)
+
+    zconj = z.conjugate()
+    wconj = w.conjugate()
+
+    # Precompute all powers needed
+    z_pows    = np.array([z**i    for i in range(p + 1)], dtype=complex)  # z^0 .. z^p
+    zc_pows   = np.array([zconj**i for i in range(q + 1)], dtype=complex)
+    w_pows    = np.array([w**i    for i in range(p + 1)], dtype=complex)
+    wc_pows   = np.array([wconj**i for i in range(q + 1)], dtype=complex)
+
+    # Precompute binomial coefficients
+    choose_p  = np.array([comb(p, k) for k in range(p + 1)])
+    choose_q  = np.array([comb(q, l) for l in range(q + 1)])
+
+    acc = 0.0 + 0j
+
+    for k in range(p + 1):
+        for l in range(q + 1):
+            kl = k + l
+            # Vectorized innermost over s
+            s_arr     = np.arange(kl + 1)
+            signs     = (-1.0) ** s_arr                      # sign(s) per your original
+            binom_kl  = np.array([comb(kl, s) for s in s_arr])
+            denom     = p + q - kl + s_arr + 1.0
+
+            inner = (z_pows[p - k] * zc_pows[q - l] * w_pows[k] * wc_pows[l]
+                     * np.sum(signs * binom_kl / denom))
+
+            acc += choose_p[k] * choose_q[l] * inner
+
     return multiplier * acc
      
 
@@ -453,8 +482,7 @@ def features2(polygon):
 ## counting parameters in the moments themselves, I find that only 19 of these should be
 ## independent. Nevertheless the dependencies are not obvious and I went through the 
 ## (painful) trouble to list them all so that the machine can choose the ones it likes 
-## best. 
-
+## best
 ## To avoid problems I had the fuction normalize the polygon first so that its area is 10
 ## and its center of mass is at the origin. The order of the invariants in the feature 
 ## vector is significant: first go the invariants formed with the moments m_{p,q,r}
@@ -654,7 +682,7 @@ def vtld(polygon, Norm = True, moment_dict = None):
     m110 = get_moment(moment_dict, X, 1,1,0).real
     return (m110 - m022)/(2*m000) - m**2
 
-def msdb(polygon, Norm = True, moment_dict = None):
+def msdb(polygon, Norm = False, moment_dict = None):
     "Mean of square distance from boundary to center of mass"
     
     if moment_dict is None:
@@ -665,7 +693,7 @@ def msdb(polygon, Norm = True, moment_dict = None):
         X = polygon
     return get_moment(moment_dict, X, 1,1,0)/get_moment(moment_dict, X, 0,0,0)
 
-def vsdb(polygon, Norm = True , moment_dict = None):
+def vsdb(polygon, Norm = False , moment_dict = None):
     "Variance of square distance from boundary to center of mass"
 
     if moment_dict is None:
@@ -680,7 +708,7 @@ def vsdb(polygon, Norm = True , moment_dict = None):
     m220 = get_moment(moment_dict, X, 2,2,0)
     return m220/m000 - (m110/m000)**2 
 
-def linear_inv(polygon, Norm = True , moment_dict = None):
+def linear_inv(polygon, Norm = False , moment_dict = None):
     """TO DO """
 
     if moment_dict is None:
@@ -701,7 +729,7 @@ def linear_inv(polygon, Norm = True , moment_dict = None):
     m4 = (1/32)*((abs(m051)**2)/25 - abs(m321)**2 + (m231**2)/3)/area**2
     return (m2,m4/(m2**2))    
 
-def dist2cm(polygon, Norm = True , moment_dict = None):
+def dist2cm(polygon, Norm = False , moment_dict = None):
     "mean, variance, skewness and kurtosis coefficients of the square distances from the center of mass"
  
     if moment_dict is None:
@@ -729,7 +757,7 @@ def dist2cm(polygon, Norm = True , moment_dict = None):
 
     return (m1,m2c,skewness,kurtosis)
 
-def skewsdb(polygon, Norm = True, moment_dict = None):
+def skewsdb(polygon, Norm = False, moment_dict = None):
     "Skewness of square distance from boundary to center of mass" 
 
 
@@ -749,7 +777,7 @@ def skewsdb(polygon, Norm = True, moment_dict = None):
     m2   = vsdb(X, Norm=False, moment_dict = moment_dict).real  
     return m3/math.sqrt(m2**3)
 
-def kurtosissdb(polygon, Norm = True, moment_dict = None):
+def kurtosissdb(polygon, Norm = False, moment_dict = None):
     "Kurtosis of square distance from boundary to center of mass" 
 
     if moment_dict is None:
@@ -769,7 +797,7 @@ def kurtosissdb(polygon, Norm = True, moment_dict = None):
     m4   = m440/m000 - 4*m330*m110/m000**2 + 6*(m220*m110**2)/m000*3 - 3*(m110/m000)**4
     return m4/m2**2 
 
-def point2line(polygon, Norm = True, moment_dict = None):
+def point2line(polygon, Norm = False, moment_dict = None):
     
     if moment_dict is None:
         moment_dict = {}
@@ -802,7 +830,7 @@ def point2line(polygon, Norm = True, moment_dict = None):
     m3c = m3 - 3*m1*m2 + 2*m1**2
     return (m2c, m3c/math.sqrt(m2c)**3)
 
-def borderdets(polygon, Norm = True, moment_dict = None):
+def borderdets(polygon, Norm = False, moment_dict = None):
     """ TO DO """
 
     if moment_dict is None:
@@ -930,6 +958,10 @@ def compute_moments(X, moment_list):
         cache[(p,q,r)] = Moment(p,q,r,X)
     return cache
 
+def perimeter(contour: np.ndarray) -> float:
+    """Arc-length of a closed contour."""
+    return cv2.arcLength(contour, closed=True)
+
 def get_moment(moment_dict, X, p, q, r):
     key = (p, q, r)
     if key in moment_dict:
@@ -940,15 +972,18 @@ def get_moment(moment_dict, X, p, q, r):
     return val
 def features_13(polygon):
 
-    polygon_ = Normalize(polygon, size = 1)
-
-    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,2,1), (0,0,4), (3,1,1), (0,3,1), (0,5,1), (3,2,1), (2,3,1)]
+    #polygon_ = Normalize(polygon, size = 1)
+    polygon_ = polygon
+    moments_list = [(0,0,0), (0,2,2), (1,1,0), (0,1,1), (2,0,0), (2,2,0), (3,3,0), (4,4,0), (1,0,0), (0,2,0), (0,0,2), (0,1,2), (0,3,0), (0,0,3), (0,1,3), (0,2,3), (0,3,3), (1,3,2), (1,2,1), (0,0,4), (3,1,1), (0,3,1), (0,5,1), (3,2,1), (2,3,1), (3,4,1), (4,5,1), (4,0,0), (3,1,0)]
     cache_moments = compute_moments(polygon_, moments_list)
 
     I1 = msdb(polygon_, False, moment_dict = cache_moments)
-    I2 = vsdb(polygon_, False, moment_dict = cache_moments)
+    I101 =  msdb(polygon_, True, moment_dict = cache_moments)
+    I2 = Hmoment(0,1,1,polygon_,epsilon=1/1000)
     I3 = skewsdb(polygon_, False, moment_dict = cache_moments)
+    I103 = skewsdb(polygon_, True, moment_dict = cache_moments)
     I4 = kurtosissdb(polygon_, False, moment_dict = cache_moments)
+    I104 = kurtosissdb(polygon_, True, moment_dict = cache_moments)
 
     m100 = get_moment(cache_moments, polygon_, 1,0,0)
     m000 = get_moment(cache_moments, polygon_, 0,0,0)
@@ -961,20 +996,82 @@ def features_13(polygon):
     m002 = get_moment(cache_moments, polygon_, 0,0,2)
     m003 = get_moment(cache_moments, polygon_, 0,0,3)
 
+    m022 = get_moment(cache_moments, polygon_, 0,2,2)
+    m033 = get_moment(cache_moments, polygon_, 0,3,3)
+
+    #m132 = get_moment(cache_moments, polygon_, 1,3,2)
+
     I7= np.imag(m002)/m000
     I8 = np.real(m003)/m000
 
     I9 = vtld(polygon_, False, moment_dict = cache_moments)
+    I109 = vtld(polygon_, True, moment_dict = cache_moments)
     I10 = point2line(polygon_, False, moment_dict = cache_moments)[0]
-    I11 = borderdets(polygon_, False,moment_dict = cache_moments)[0]
+    #I110 = point2line(polygon_, True, moment_dict = cache_moments)[0]
+    #I11 = borderdets(polygon_, False,moment_dict = cache_moments)[0]
+    I11 = get_moment(cache_moments, polygon_, 0,1,1).imag
 
-    I12, I13 = linear_inv(polygon_, Norm = False, moment_dict= cache_moments)
+    I12, I13 = linear_inv(polygon_, Norm = False, moment_dict= cache_moments) # SEEMS == 26
+    I112, I113 = linear_inv(polygon_, Norm = True, moment_dict= cache_moments)
+
+    I14 = m022.imag/m000
+    I15 = m033.real/m000
+    I16 =  Hmoment(1,1,0,polygon_).real
+    I17 = Kmoment_old(polygon_)
+    I18 = absKmoment(polygon_)
+    #I19 = Kmoment_new(polygon_)
+    I19 = Kmoment_naive(polygon_)
+    #I20 = Kmoment(0,1,1,polygon_,True)
+    I20 = Kmixed_moment(1, polygon_, False )
+    I21 = Kmixed_moment(2, polygon_, False )
+    I22 = Kmixed_moment(3, polygon_, False )
+    I23 = abs(Kmoment(2,0,0, polygon_,False, 0))
+    I120 = Kmixed_moment(1, polygon_, True )
+    I121 = Kmixed_moment(2, polygon_, True )
+    I122 = Kmixed_moment(3, polygon_, True )
+    I123 = abs(Kmoment(2,0,0, polygon_,True, 0))
+    dist2cm_features = dist2cm(polygon_, False, moment_dict = cache_moments)
+    dist2cm_features_1 = dist2cm(polygon_, True, moment_dict = cache_moments)
+    I24 = dist2cm_features[0]
+    I25 = dist2cm_features[3]
+    I124 = dist2cm_features_1[0]
+    I125 = dist2cm_features_1[3]
+    #I26 = borderTs(polygon_, False, moment_dict = cache_moments)[0]
+    I27 = get_moment(cache_moments, polygon_, 0,0,0).real
+    #I28 = abs( m311 / m011.imag)
+    #I29 = get_moment(cache_moments, polygon_, 0,2,2).imag/ get_moment(cache_moments, polygon_, 0,0,0).real
+    I30 = borderdets(polygon_, False, moment_dict = cache_moments)[0]
+    I31 = point2line(polygon_, False, moment_dict = cache_moments)[1]
+    I130 = borderdets(polygon_, True, moment_dict = cache_moments)[0]
+    #I131 = point2line(polygon_, True, moment_dict = cache_moments)[1]
+    I32 = Kz_moment(1,polygon,True)
+    I33 = Kmoment(0,1,1,polygon,False, 5).real
+    I34 = Kmoment(0,2,2,polygon,False, 5).imag
+    I35 = abs( Kmoment(2,0,0,polygon,False, 5))
+    I36 = Kmoment(1,2,1,polygon,False, 5)
+    I37 = abs( Kmoment(0,1,1,polygon,False, 5) )
+    I133 = Kmoment(0,1,1,polygon,True, 5).real
+    I134 = Kmoment(0,2,2,polygon,True, 5).imag
+    I135 = abs( Kmoment(2,0,0,polygon,True, 5))
+    I136 = Kmoment(1,2,1,polygon,True, 5)
+    I137 = abs( Kmoment(0,1,1,polygon,True, 5) )
+
+    #cnt   = complex_to_contour(polygon_)
+    #hull  = cv2.convexHull(cnt)
+    #I21 = area(polygon_) / cv2.contourArea(hull)
+    #I22 = perimeter(cnt)/perimeter(cv2.convexHull(hull))
+
+    #I21 = Kmoment(0,2,2,polygon_,True, 0)
+    #print("I21: ", I21)
+    #I22 = Kmoment(0,3,3,polygon_,True, 0)
+    #print("I22: ", I22)
+    #I23 = Kmoment(1,1,1,polygon_,True, 0)
+    #print("I23: ", I23)
+    #I38 = bdT(polygon_, moment_dict = cache_moments)
     
-
-
     invariants = {
         "JC1": I1,
-        "JC2": I2,
+        "Hmoment": I2,
         "JC3": I3,
         "JC4": I4,
         "JC5": I5,
@@ -986,9 +1083,83 @@ def features_13(polygon):
         "JC11": I11,
         "JC12": I12,
         "JC13": I13,
+        "JC14": I14,
+        "JC15": I15,
+        "JC16": I16,
+        "JC17": I17,
+        "JC18": I18,
+        "JC19": I19,
+        "JC20": I20,
+        "JC21": I21,
+        "JC22": I22,
+        "JC23": I23,
+        "JC24": I24,
+        "JC25": I25,
+        #"JC26": I26,
+        "JC27": I27,
+        #"JC28": I28,
+        #"JC29": I29,
+        "JC30": I30,
+        "JC31": I31,
+        "JC32": I32,
+        "JC33": I33,
+        "JC34": I34,
+        "JC35": I35,
+        "JC36": I36,
+        "JC37": I37,
+        "JC101": I101,
+        "JC103": I103,
+        "JC104": I104,
+        "JC109": I109,
+        #"JC110": I110,
+        "JC112": I112, #39
+        "JC113": I113,
+        "JC120": I120,
+        "JC121": I121,
+        "JC122": I122, #43
+        "JC123": I123,
+        "JC124": I124,
+        "JC125": I125,
+        "JC130": I130,
+        #"JC131": I131,
+        "JC133": I133,
+        "JC134": I134,
+        "JC135": I135,
+        "JC136": I136,
+        "JC137": I137
+
+        #"JC38": I38
     }
 
     return invariants
+
+
+"""
+OLD INVARIANTS 96.28% accuracy
+feature_names = [
+        "msdb",
+        " vsdb ",
+        " skewsdb ",
+        " kurtosissdb ",
+        " abs(m100/m000)" ,
+        " abs(m311/m011)" ,
+        " np.imag(m002)/m000 ",
+        " np.real(m003)/m000 ",
+        " vtld ",
+        " point2line ",
+        " borderdets ",
+        " linear_inv[0] " ,
+        " linear_inv[1] ",
+        " m022.imag/m000 ",
+        " m033.real/m000" ,
+        " m132.real ",
+        "Kmoment_old",
+        "absKmoment",
+        "Kmoment",
+        "Kmixed_moment_1",
+        "Kmixed_moment_2",
+        "Kmixed_moment_3"
+]"""
 
 def all_moments(polygon, moments_list):
     """
@@ -997,7 +1168,7 @@ def all_moments(polygon, moments_list):
     polygon_ = Normalize(polygon, size = 1)
     cache_moments = compute_moments(polygon_, moments_list)
 
-    return list(cache_moments.items())
+    return cache_moments
 
 def thirteen( X ):
     "The thirteen invariants"
@@ -1059,7 +1230,10 @@ def clean(string,k):
     return acc
 
 ### Small project: print out the features of three polygons directly to a .csv file.
-
+def complex_to_contour(polygon):
+    """Convert array of complex numbers to OpenCV contour shape (N,1,2) float32."""
+    pts = np.array([[z.real, z.imag] for z in polygon], dtype=np.float32)
+    return pts.reshape(-1, 1, 2)
 #### IMPORTANT : Check the computations of moments.
 #### Beware of normalization of area to 10 !!! What is the effect of that?
 
@@ -1099,3 +1273,266 @@ def TPNL(polygon):
     acc.append(polygon[0].conjugate() * (-1j) 
                * (polygon[0] - polygon[n-1])/abs(polygon[0] - polygon[n-1]))
     return acc  
+
+
+
+
+def claude_moments(polygon, moments_list):
+    """
+    Compute all moments and return rotation-invariant features
+    as a flat numpy array of real values ready for the MLP.
+
+    Under rotation by angle θ, Moment(p,q,r) transforms as e^(i*(p-q)*θ).
+    So the rotational order of a moment (p,q,r) is n = p - q.
+
+    Invariants are built from three strategies:
+      1. Self-magnitude:     |m(p,q,r)|^2         — order 0, always invariant
+      2. Conjugate products: m(p,q,r)*conj(m(q,p,r)) — orders cancel: n + (-n) = 0
+      3. Triple products:    m1 * m2 * conj(m3)   — when (p1-q1)+(p2-q2)==(p3-q3)
+
+    Each complex result contributes real + imag as separate features.
+    """
+    polygon_ = Normalize(polygon, size=1)
+    cache_moments = compute_moments(polygon_, moments_list)
+
+    features = []
+    M = cache_moments
+    keys = list(M.keys())
+
+    # --- Strategy 1: self-magnitude |m(p,q,r)|^2 ---
+    # Rotational order: n - n = 0. Always real, always invariant.
+    for key, val in M.items():
+        features.append(np.abs(val) ** 2)
+
+    # --- Strategy 2: m(p,q,r) * conj(m(q,p,r)) ---
+    # Order of m(p,q,r) is (p-q), order of conj(m(q,p,r)) is -(q-p) = (p-q)
+    # Wait — conj flips sign: conj(e^(i*n*θ)) = e^(-i*n*θ)
+    # So m(p,q,r) * conj(m(q,p,r)) has order (p-q) + (-(q-p)) = 2*(p-q)... 
+    # Correct pairing: m(p,q,r) * conj(m(p,q,r)) = |m|^2 (already in strategy 1)
+    # For cross-pairs: need (p1-q1) == (p2-q2) so their difference is 0
+    seen_pairs = set()
+    for (p1, q1, r1) in keys:
+        for (p2, q2, r2) in keys:
+            # Invariant when rotational orders match: (p1-q1) == (p2-q2)
+            # Product: m1 * conj(m2) has order (p1-q1) - (p2-q2) = 0
+            if (p1 - q1) == (p2 - q2):
+                pair = tuple(sorted([(p1,q1,r1), (p2,q2,r2)]))
+                if pair not in seen_pairs and (p1,q1,r1) != (p2,q2,r2):
+                    seen_pairs.add(pair)
+                    raw = M[(p1,q1,r1)] * np.conj(M[(p2,q2,r2)])
+                    features += [np.real(raw), np.imag(raw)]
+
+    # --- Strategy 3: triple products m1 * m2 * conj(m3) ---
+    # Invariant when: (p1-q1) + (p2-q2) == (p3-q3)
+    # Cap total degree to avoid combinatorial explosion
+    max_total_order = max(p + q + r for (p, q, r) in keys)
+    seen_triples = set()
+    for (p1,q1,r1) in keys:
+        for (p2,q2,r2) in keys:
+            target = (p1 - q1) + (p2 - q2)
+            for (p3,q3,r3) in keys:
+                if (p3 - q3) == target:
+                    # Cap to avoid explosion: skip high total-order combinations
+                    total = (p1+q1+r1) + (p2+q2+r2) + (p3+q3+r3)
+                    if total > max_total_order:
+                        continue
+                    triple = (tuple(sorted([(p1,q1,r1),(p2,q2,r2)])), (p3,q3,r3))
+                    if triple not in seen_triples:
+                        seen_triples.add(triple)
+                        raw = M[(p1,q1,r1)] * M[(p2,q2,r2)] * np.conj(M[(p3,q3,r3)])
+                        features += [np.real(raw), np.imag(raw)]
+
+    return np.array(features, dtype=np.float32)
+
+def eight(X):
+    m000 = Moment(0,0,0,X).real
+    m011 = Moment(0,1,1,X).imag
+    m311 = Moment(3,1,1,X)
+    m033 = Moment(0,3,3,X)
+    dcm = dist2cm(X) 
+    invariants = {
+        "JC1": dcm[0],
+        "JC2": dcm[1],
+        "JC3": dcm[3],
+        "JC4": linear_inv(X)[0],
+        "JC5": abs(m311/m011),
+        "JC6": m033.real/m000,
+        "JC7": vtld(X),
+        "JC8": point2line(X)[0],
+    }
+    return invariants
+
+def CyclicSum3(func, atuple):
+    """Given a function of three variables func(x,y,z) and a sequence with at least three
+    entries, atuple  = (a0 a1 a2 ... an), this function computes the cyclic sum
+    f(an,a0,a1) + f(a0,a1,a2)  + ... + f(a(n-1),an,a1)."""
+    N = len(atuple)
+    acc = func(atuple[-1], atuple[0], atuple[1]) + func(atuple[-2], atuple[N-1], atuple[0])
+    for x in range(N - 2):
+        acc = acc + func(atuple[x],atuple[x+1],atuple[x+2])
+    return acc
+
+def angle(a,b,c):
+    "Angle (in radians) formed by the complex numbers a, b, and c"
+    z = b - a
+    w = c - b
+    return cmath.phase(w/z)
+
+def f(a,b,c):
+    "Simplest test for using curvature in invariants"
+    return angle(a,b,c)*abs(b)**2
+
+"""def Kmoment(x):
+    "The new invariant involving curvature"
+    return CyclicSum3(f,x)"""
+
+def three(x):
+    invariants = {
+    "JC1": Kmoment_old(x),
+    "JC2": linear_inv(x)[0],
+    "JC3": vtld(x),
+    }
+
+    return invariants
+
+def CyclicSum3_(curvature):
+    return np.sum(curvature)
+
+from utils import compute_curvature_per_vertex_new, compute_curvature_per_vertex_old
+
+def Kmoment_old(x):
+    "The new invariant involving curvature"
+    curvature = compute_curvature_per_vertex_old(x)
+    return CyclicSum3_(curvature)
+
+def Kmoment_new(x):
+    "The new invariant involving curvature"
+    curvature = compute_curvature_per_vertex_new(x)
+    return CyclicSum3_(curvature)
+
+def absf(a,b,c):
+    "For absolute version of Kmoment"
+    return abs(angle(a,b,c))*abs(b)**2
+
+def absKmoment(x):
+    return CyclicSum3(absf,x)
+
+
+######################
+
+def angle(a,b,c):
+    "Angle (in radians) formed by the complex numbers a, b, and c"
+    z = b - a
+    w = c - b
+    return cmath.phase(w/z)
+
+def convexity_sign(a,b,c):
+    "+1 if it's a convex point, -1 if it's a concave point"
+    if angle(a,b,c) >= 0:
+        return 1
+    else:
+        return -1
+
+def z_moment(a,b,c,n,total=False):
+    "Vertex function for computing the curvature-weighted version of mnn0"
+    if not total:
+        return angle(a,b,c)*abs(b)**(2*n)
+    else:
+        return abs(angle(a,b,c))*abs(b)**(2*n)
+   
+
+     
+def mixed_moment(a, b, c, n, total=False):
+    "Vertex function for computing the curvature-weighted version of m0nn"
+    res = (b.conjugate()**n) * (((c-b)/abs(c-b))**n - ((b-a)/abs(b-a))**n)
+    if not total:
+        return res  # Note: 't' was undefined; assuming you meant 'res'
+    else:
+        return convexity_sign(a, b, c) * res
+
+
+def K(a,b,c,total=False):
+    "Usual and absolute curvature"
+    if not total:
+        return angle(a,b,c)
+    else:
+        return abs(angle(a,b,c))
+
+def Kz_moment(n,x,total=False):
+    "Computes the curvature-weighted version of mnn0"
+    return CyclicSum3(lambda a,b,c: z_moment(a,b,c,n,total),x)
+
+def Kmixed_moment(n,x,total=False):
+    "Computes the curvature-weighted version of m0nn"
+    return CyclicSum3(lambda a,b,c: mixed_moment(a,b,c,n,total),x)
+   
+       
+def total_curv(x,total=False):
+    return CyclicSum3(lambda a,b,c: K(a,b,c,total),x)
+
+def Kmoment_term(p,q,r,a,b,c,total=False, lmbda=0):
+    "The summand for the curvature weighted moments"
+    if r == 0 and not total and lmbda == 0:
+        return pow(b,p)*pow(b.conjugate(),q)*angle(a,b,c)
+    elif r == 0 and not total and lmbda != 0:
+        return pow(b,p)*pow(b.conjugate(),q)*(1+lmbda * angle(a,b,c))
+    elif r == 0 and total and lmbda == 0:
+        return pow(b,p)*pow(b.conjugate(),q)*angle(a,b,c)*convexity_sign(a,b,c)
+    elif r != 0 and not total and lmbda == 0:
+        return pow(b,p)*pow(b.conjugate(),q)*(pow((c-b)/abs(c-b),r) -
+                                       pow((b-a)/abs(b-a),r))
+    else:
+        return pow(b,p)*pow(b.conjugate(),q)*(pow((c-b)/abs(c-b),r) -
+                                       pow((b-a)/abs(b-a),r)) * convexity_sign(a,b,c)
+
+       
+def Kmoment(p,q,r,polygon,total=False, lmbda=3):
+    "Curvature weighted moments. Set total to True for absolute curvature"
+    return CyclicSum3(lambda a,b,c: Kmoment_term(p,q,r,a,b,c,total, lmbda),polygon)   
+
+def Kmoment_naive(x):
+    "The new invariant involving curvature"
+    return CyclicSum3(f,x)  
+
+
+def bdT(x, moment_dict):
+    m000 = get_moment(moment_dict, x, 0, 0, 0,)
+    m100 = get_moment(moment_dict, x, 1, 0, 0,)
+    m010 = m100.conjugate()
+    m200 = get_moment(moment_dict, x, 2, 0, 0,)
+    m020 = m200.conjugate()
+    m110 = get_moment(moment_dict, x, 1, 1, 0,)
+    return -(2/3)*(m000*m200*m020 - m110**2).real + 3*(m020*m100**2).real - 3*(m110*m100*m010).real
+
+def borderTs(polygon, Norm = False, moment_dict = None):
+    if Norm:
+        polygon = Normalize(polygon)
+    m000 = get_moment(moment_dict, polygon, 0, 0, 0,).real
+    m110 = get_moment(moment_dict, polygon, 1, 1, 0,).real
+    m200 = get_moment(moment_dict, polygon, 2, 0, 0,)
+    m2 = -(abs(m200)**2 - m110**2)/(2*m000**2)
+    m400 = get_moment(moment_dict, polygon, 4, 0, 0,)
+    m310 = get_moment(moment_dict, polygon, 3, 1, 0,)
+    m220 = get_moment(moment_dict, polygon, 2, 2, 0,)
+    m4 = (abs(m400)**2 -4*abs(m310)**2 + 3*m220**2)/(8*m000**2)
+    return (m2,m4/m2**2)
+
+def Heaviside_curvature(a, b, c, epsilon):
+        "+1 for exterior angle > epsilon, -1 for exterior angle < -epsilon, else equal to zero"
+        if angle(a, b, c) > epsilon:
+            return 1
+        elif angle(a, b, c) < -epsilon:
+            return -1
+        else:
+            return 0
+    
+
+def Hmoment_term(p,q,r,a,b,c,epsilon):
+    if Heaviside_curvature(a,b,c,epsilon) == 0:
+        return 0
+    else:
+        return Heaviside_curvature(a,b,c,epsilon) * (MomentTripleSum(p, q, r, a, b) + MomentTripleSum(p, q, r, b, c))
+    
+
+def Hmoment(p,q,r,polygon,epsilon=1/1000):
+    return 0.5*CyclicSum3(lambda a, b, c: Hmoment_term(p, q, r, a, b, c, epsilon), polygon)

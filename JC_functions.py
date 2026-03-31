@@ -446,12 +446,17 @@ def RePerturb(polygon,n=2):
 ### Normalizing polygons
 
 
-def Normalize(X):
-       """Displaces a polygon so that its center of mass lies at the origin
-       and dilates it so its area equals 10"""
-       CM = CenterMass(X)
-       a = math.sqrt(area(X)/10)
-       return tuple(map(lambda x: (x-CM)/a, X))
+def Normalize(X, size=10):
+    """Displaces a polygon so that its center of mass lies at the origin
+    and dilates it so its area equals 10"""
+    
+    # Ensure counter-clockwise ordering (shoelace area is positive for CCW)
+    if area(X) < 0:
+        X = tuple(reversed(X))
+    
+    CM = CenterMass(X)
+    a = math.sqrt(area(X) / size)
+    return tuple(map(lambda x: (x - CM) / a, X))
 
 
 def features(polygon):
@@ -827,34 +832,132 @@ def local_pca(data, labels):
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import shap
 
-def RF_classifier(X_scaled, labels):
+def RF_classifier(X_scaled, labels, feature_names=None):
     X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, labels,
-    test_size=0.25,
-    random_state=42,
-    stratify=labels
-)
-
-
+        X_scaled, labels,
+        test_size=0.20,
+        random_state=42,
+        stratify=labels
+    )
 
     rf = RandomForestClassifier(
-    n_estimators=500,
-    max_depth=None,
-    min_samples_split=2,
-    min_samples_leaf=1,
-    max_features="sqrt",
-    bootstrap=True,
-    n_jobs=-1,
-    random_state=42
-)
-
+        n_estimators=800,
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        max_features="sqrt",
+        bootstrap=True,
+        n_jobs=-1,
+        random_state=42
+    )
     rf.fit(X_train, y_train)
 
-
-
     y_pred = rf.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    print(f"Test accuracy: {acc:.4f}")
+    print("\nClassification report:")
+    print(classification_report(y_test, y_pred))
+    print("\nConfusion matrix:")
+    print(confusion_matrix(y_test, y_pred))
+
+    # --- SHAP Explanation ---
+    explainer = shap.TreeExplainer(rf)
+
+    # Use a background sample for speed if test set is large
+    X_explain = X_test
+
+    # shap_values shape: (n_classes, n_samples, n_features)
+    shap_values = explainer.shap_values(X_explain)
+
+    if feature_names is None:
+        feature_names = [f"Feature {i}" for i in range(X_scaled.shape[1])]
+
+    for i, cls in enumerate(rf.classes_):
+        print(f"\nSHAP summary — class {cls}")
+
+        # Slice correctly depending on format
+        if isinstance(shap_values, list):
+            sv = shap_values[i]                  # old: list of (n_samples, n_features)
+        else:
+            sv = shap_values[:, :, i]            # new: (n_samples, n_features, n_classes)
+
+        shap.summary_plot(sv, X_explain,
+                          feature_names=feature_names,
+                          show=False)
+        plt.title(f"SHAP — class {cls}")
+        plt.tight_layout()
+        plt.show()
+    
+    sv = shap_values  # (n_samples, n_features, n_classes)
+    n_classes = sv.shape[2]
+    n_top = 10
+
+    mean_abs_global = np.abs(sv).mean(axis=0).mean(axis=1)
+    top_idx = np.argsort(mean_abs_global)[::-1][:n_top]
+    feature_names = [f"Feature {i}" for i in range(sv.shape[1])]  # replace with real names
+
+    fig, axes = plt.subplots(
+        n_classes, 1,
+        figsize=(10, 3.5 * n_classes),
+        sharex=True
+    )
+
+    for c, ax in enumerate(axes):
+        for row, feat in enumerate(top_idx[::-1]):  # reversed so top feature is at top
+            shap_vals  = sv[:, feat, c]
+            feat_vals  = X_explain[:, feat]
+
+            # normalize feature values to [0,1] for coloring
+            vmin, vmax = feat_vals.min(), feat_vals.max()
+            feat_norm  = (feat_vals - vmin) / (vmax - vmin + 1e-9)
+
+            # jitter y so dots don't stack on top of each other
+            y_jitter = row + np.random.uniform(-0.2, 0.2, size=len(shap_vals))
+
+            ax.scatter(
+                shap_vals, y_jitter,
+                c=feat_norm, cmap='coolwarm',
+                s=12, alpha=0.6, linewidths=0,
+                vmin=0, vmax=1
+            )
+
+        ax.axvline(0, color='gray', linewidth=0.8, linestyle='--')
+        ax.set_yticks(range(n_top))
+        ax.set_yticklabels([feature_names[i] for i in top_idx[::-1]], fontsize=9)
+        ax.set_title(f"Class {c}", fontsize=11)
+        ax.set_xlabel("")
+        ax.grid(axis='x', linewidth=0.3, alpha=0.4)
+
+    fig.supxlabel("SHAP value", fontsize=11)
+    plt.suptitle("Beeswarm per class — shared scale", fontsize=13)
+    plt.tight_layout()
+    plt.show()
+    return acc, explainer, shap_values
+
+def SVM_classifier(X_scaled, labels):
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, labels,
+        test_size=0.25,
+        random_state=42,
+        stratify=labels
+    )
+
+    svm = SVC(
+        C=1.0,
+        kernel="rbf",
+        gamma="scale",
+        class_weight=None,
+        probability=True,
+        random_state=42
+    )
+
+    svm.fit(X_train, y_train)
+
+    y_pred = svm.predict(X_test)
 
     acc = accuracy_score(y_test, y_pred)
     print(f"Test accuracy: {acc:.4f}")
@@ -864,3 +967,77 @@ def RF_classifier(X_scaled, labels):
 
     print("\nConfusion matrix:")
     print(confusion_matrix(y_test, y_pred))
+
+    # SVMs don't have built-in feature importances like RF.
+    # For linear kernels, we can use the weight coefficients.
+    # For non-linear kernels (e.g. rbf), we use permutation importance instead.
+    if svm.kernel == "linear":
+        importance = np.abs(svm.coef_[0])
+        top_n    = min(40, len(importance))
+        top_idx  = np.argsort(importance)[-top_n:][::-1]
+        print("\nTop feature indices and their importance (|coef|):")
+        for idx in top_idx:
+            print(f"Feature {idx}: Importance {importance[idx]:.4f}")
+    else:
+        from sklearn.inspection import permutation_importance
+        result   = permutation_importance(svm, X_test, y_test, n_repeats=10,
+                                          random_state=42, n_jobs=-1)
+        importance = result.importances_mean
+        top_n    = min(40, len(importance))
+        top_idx  = np.argsort(importance)[-top_n:][::-1]
+        print("\nTop feature indices and their importance (permutation):")
+        for idx in top_idx:
+            print(f"Feature {idx}: Importance {importance[idx]:.4f}")
+
+from sklearn.tree import DecisionTreeClassifier,export_text, plot_tree
+import numpy as np
+import matplotlib.pyplot as plt
+
+def DT_classifier(X_scaled, labels):
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, labels,
+        test_size=0.25,
+        random_state=42,
+        stratify=labels
+    )
+
+    dt = DecisionTreeClassifier(
+        max_depth=13,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        max_features=None,
+        criterion="gini",
+        random_state=42
+    )
+
+    dt.fit(X_train, y_train)
+    feature_names = [f"feature_{i}" for i in range(X_scaled.shape[1])]
+    class_names = [str(c) for c in dt.classes_]
+
+    y_pred = dt.predict(X_test)
+
+    acc = accuracy_score(y_test, y_pred)
+    print(f"Test accuracy: {acc:.4f}")
+
+    print("\nClassification report:")
+    print(classification_report(y_test, y_pred))
+
+    print("\nConfusion matrix:")
+    print(confusion_matrix(y_test, y_pred))
+
+    importance = dt.feature_importances_
+    top_n      = min(40, len(importance))
+    top_idx    = np.argsort(importance)[-top_n:][::-1]
+    print("Top feature indices and their importance:")
+    for idx in top_idx:
+        print(f"Feature {idx}: Importance {importance[idx]:.4f}")
+    
+    print(export_text(dt, feature_names=feature_names))
+
+    plt.figure(figsize=(20,10))
+    plot_tree(dt, feature_names=feature_names,
+            class_names=class_names,
+            filled=True)
+    plt.show()
+
+    return acc
